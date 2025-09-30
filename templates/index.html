@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>语音转写Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .upload-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .file-input {
+            margin: 10px 0;
+        }
+
+        .upload-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .upload-btn:hover {
+            background-color: #45a049;
+        }
+
+        .upload-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .result-section {
+            margin-top: 30px;
+        }
+
+        .result-box {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            min-height: 100px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #666;
+            margin: 20px 0;
+        }
+
+        .error {
+            display: none;
+            color: red;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #ffebee;
+            border-radius: 4px;
+        }
+
+        .success {
+            display: none;
+            color: green;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #e8f5e9;
+            border-radius: 4px;
+        }
+
+        .info-text {
+            color: #666;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+
+        .download-btn {
+            background-color: #2196F3;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .download-btn:hover {
+            background-color: #0b7dda;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>语音转写Demo</h1>
+        <p style="text-align: center; color: #666;">基于Baidu语音识别API</p>
+
+        <!-- 上传区域 -->
+        <div class="upload-section">
+            <h3>选择音频文件</h3>
+            <p class="info-text">支持格式：MP3, WAV, M4A (最大10MB)</p>
+            <input type="file" id="fileInput" class="file-input" accept=".mp3,.wav,.m4a,.amr">
+            <br><br>
+            <button id="uploadBtn" class="upload-btn" onclick="uploadFile()">上传并识别</button>
+        </div>
+
+        <!-- 加载提示 -->
+        <div id="loading" class="loading">
+            正在识别中，请稍候...
+        </div>
+
+        <!-- 错误提示 -->
+        <div id="error" class="error"></div>
+
+        <!-- 成功提示 -->
+        <div id="success" class="success"></div>
+
+        <!-- 结果显示 -->
+        <div class="result-section">
+            <h3>识别结果</h3>
+            <div id="resultBox" class="result-box">
+                暂无识别结果
+            </div>
+            <button id="downloadBtn" class="download-btn" onclick="downloadResult()">下载结果</button>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量存储识别结果
+        let recognitionResult = '';
+
+        // 上传文件并识别
+        function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+
+            // 检查是否选择了文件
+            if (!file) {
+                showError('请先选择一个音频文件');
+                return;
+            }
+
+            // 检查文件大小
+            if (file.size > 10 * 1024 * 1024) {
+                showError('文件大小不能超过10MB');
+                return;
+            }
+
+            // 准备上传
+            const formData = new FormData();
+            formData.append('audio', file);
+
+            // 显示加载状态
+            showLoading(true);
+            hideMessages();
+            disableUpload(true);
+
+            // 发送请求
+            fetch('/api/transcribe', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                showLoading(false);
+                disableUpload(false);
+
+                if (data.success) {
+                    // 显示结果
+                    recognitionResult = data.text;
+                    document.getElementById('resultBox').innerText = data.text || '(无识别内容)';
+                    document.getElementById('downloadBtn').style.display = 'inline-block';
+                    showSuccess('识别成功！');
+                } else {
+                    showError(data.error || '识别失败，请重试');
+                }
+            })
+            .catch(error => {
+                showLoading(false);
+                disableUpload(false);
+                showError('网络错误：' + error.message);
+            });
+        }
+
+        // 下载结果
+        function downloadResult() {
+            if (!recognitionResult) {
+                showError('没有可下载的内容');
+                return;
+            }
+
+            // 创建下载
+            const blob = new Blob([recognitionResult], { type: 'text/plain;charset=utf-8' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '识别结果.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            showSuccess('下载成功！');
+        }
+
+        // 显示/隐藏加载状态
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.innerText = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // 显示成功信息
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success');
+            successDiv.innerText = message;
+            successDiv.style.display = 'block';
+            setTimeout(() => {
+                successDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        // 隐藏所有消息
+        function hideMessages() {
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('success').style.display = 'none';
+        }
+
+        // 禁用/启用上传按钮
+        function disableUpload(disable) {
+            document.getElementById('uploadBtn').disabled = disable;
+        }
+
+        // 文件选择变化时清除之前的错误提示
+        document.getElementById('fileInput').addEventListener('change', function() {
+            hideMessages();
+        });
+    </script>
+</body>
+</html>
